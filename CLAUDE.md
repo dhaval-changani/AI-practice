@@ -28,8 +28,7 @@ npm run build    # tsc -> dist/
 npm run typecheck # tsc --noEmit
 ```
 
-`npm run typecheck` currently **fails** in `src/orcstrator/index.ts` — that file references a
-`this.agents` property that was never assigned. This is the known starting state, not a regression.
+`npm run typecheck` currently **passes**.
 
 No test runner is configured — `npm test` is still the stub that exits 1. If tests are added, wire up a real runner before relying on it.
 
@@ -37,42 +36,51 @@ No test runner is configured — `npm test` is still the stub that exits 1. If t
 
 A POC on top of the **OpenAI Agents SDK** (`@openai/agents`), ESM + TypeScript, executed directly with `tsx` (no build step needed for development).
 
-- `src/index.ts` — entrypoint. Declares a local `Orcestrator` class that is a near-**copy** of the one
-  in `src/orcstrator/index.ts`; its `runLoop()` ignores its own constructor arguments and hard-codes a
-  `run(reportAgent, ...)` call. `src/index.ts` never imports `src/orcstrator/`.
-- `src/orcstrator/index.ts` — untracked work-in-progress orchestrator skeleton. Does not compile and
-  nothing imports it. Note the two spellings: directory `orcstrator/`, class `Orcestrator` — grep for
-  both.
-- `src/agents/*.ts` — one agent per file, each exporting a single `const <name>Agent`. Tools are
-  defined module-private directly above the agent that uses them (see `orderReportTool` in
-  `report-agent.ts`), with zod `parameters` on the zod v4 API.
-- `src/agents/index.ts` — barrel re-exporting every agent; new agents should be added here.
-- `src/utils/validate-env.ts` — untracked. Calls `process.loadEnvFile()` as a **module-level side
-  effect at import time**; nothing else loads `.env`. Exports `validateEnv`, a zod schema that remaps
-  `OPENAI_API_KEY` / `OPENAI_MODEL` onto `api_key` / `model_name` and throws when either is missing.
+- `src/index.ts` — entrypoint. Calls `validateEnv(process.env)`, constructs `ReportAgent` with the
+  validated model name, wraps the resulting `Agent` in `Orcestrator`, and calls `runLoop()` with a
+  hardcoded query string.
+- `src/orcstrator/index.ts` — the `Orcestrator` class. Takes an `Agent[]`, but `runLoop()` currently
+  runs only `agents[0]` via `run()` and logs `finalOutput`; the remaining agents are ignored. Note
+  the two spellings: directory `orcstrator/`, class `Orcestrator` — grep for both.
+- `src/agents/*.ts` — one agent per file. Each file exports a **class** (`ReportAgent`,
+  `MenuAgent`, `CustomerAgent`) that implements `AIAgent`, takes `modelName` as a constructor
+  argument, holds its tools as private fields built with `tool()` and zod v4 `parameters`, and
+  exposes `getAgent()` returning a constructed `Agent`.
+- `src/agents/index.ts` — barrel re-exporting every agent class; new agents should be added here.
+- `src/types/agent.ts` — the `AIAgent` interface (`getAgent(): Agent`), the shared shape all agent
+  classes implement.
+- `src/utils/validate-env.ts` — calls `process.loadEnvFile()` as a **module-level side effect at
+  import time**; nothing else loads `.env`. Exports `validateEnv`, which parses `NodeJS.ProcessEnv`
+  through a zod schema remapping `OPENAI_API_KEY` / `OPENAI_MODEL` onto `api_key` / `model_name`
+  and throws when either is missing.
 
-Orchestration status: one agent (`reportAgent`) has a real tool. There are no `handoffs`, no
-`outputType`, no guardrails, no `RunContext`, no tracing config and no streaming anywhere yet.
+Orchestration status: three agents exist, each with at least one real tool. There are no
+`handoffs`, no `outputType`, no guardrails, no `RunContext`, no tracing config and no streaming
+anywhere yet.
 
 ## Known rough edges
 
 Observations only — under Learning Mode these are mine to fix.
 
-- `hubspotAgent` and `menuAgent` hardcode `model: "gpt-5.6-luna"`, which is not a real model id.
-  `reportAgent` instead reads `String(process.env.OPENAI_MODEL)` at module scope.
-- That model read is **import-order sensitive**: `src/index.ts` imports the agents barrel before
-  `validate-env.ts`, so `loadEnvFile()` may not have run yet when `reportAgent` is constructed.
+- `MenuAgent` and `CustomerAgent` are never instantiated — `src/index.ts` wires up only
+  `ReportAgent`, so those two have never been through a real run.
+- `Orcestrator.runLoop()` accepts an array but uses only the first element; the constructor
+  signature promises orchestration the body does not do yet.
+- `validateEnv` returns `api_key`, but nothing consumes it — the SDK reads `OPENAI_API_KEY` from
+  `process.env` itself. The validation is fail-fast only.
+- `ReportAgent`'s `get_order_sales_data` takes full ISO datetimes (`z.iso.datetime()`); the current
+  date is injected into the agent instructions so the model has a reference point to resolve
+  relative dates against.
 - `nodemon` is a dependency but unused — the scripts use `tsx watch`.
-- `dist/` is stale, holding only two files from an older build.
+- `dist/` is stale, holding four files from an older build (including a `menu-agent.js` that no
+  longer matches the current source layout).
 
 ## LEARNING.md
 
 `LEARNING.md` is the companion primer on multi-agent orchestration, and section 7 sets the build
 order for this repo: (1) give one agent a real tool, (2) chain two agents in plain code, (3) add a
 triage agent using `handoffs`, (4) convert to agents-as-tools with structured outputs. Progress:
-step 1 done, step 2 in progress. Read it before suggesting any architectural direction. Its
-section 8 checklist is itself partly outdated — it cites model id `gpt-6-luna` and a missing
-`.gitignore`.
+step 1 done, step 2 in progress. Read it before suggesting any architectural direction.
 
 ## Conventions
 

@@ -38,8 +38,9 @@ return final text
 
 > **agent = LLM + tools + a loop + accumulated context**
 
-`run()` from `@openai/agents` is exactly this loop. The agents in `src/agents/` currently
-have instructions and a model but no tools, so the loop terminates on the first pass.
+`run()` from `@openai/agents` is exactly this loop. Every agent in `src/agents/` now carries at
+least one `tool()`, so the loop can take a second pass: `get_order_sales_data` on `ReportAgent`,
+`find_customer` on `CustomerAgent`, `create_menu` / `create_item` on `MenuAgent`.
 
 ## 3. Why more than one agent?
 
@@ -68,7 +69,7 @@ the model.
 ### a) Deterministic chaining — you route, in code
 
 ```ts
-const data   = await run(hubspotAgent, query);
+const data   = await run(customerAgent, query);
 const report = await run(reportAgent, data.finalOutput);
 ```
 
@@ -85,7 +86,7 @@ transfers control:
 const triage = new Agent({
   name: "Triage",
   instructions: "Route the user to the right specialist.",
-  handoffs: [menuAgent, hubspotAgent, reportAgent],
+  handoffs: [menuAgent, customerAgent, reportAgent],
 });
 ```
 
@@ -99,8 +100,8 @@ branch depends on natural-language intent you cannot express in an `if`.
 const orchestrator = new Agent({
   name: "Orchestrator",
   tools: [
-    hubspotAgent.asTool({ toolName: "fetch_client_data", /* ... */ }),
-    reportAgent.asTool({ toolName: "write_report",       /* ... */ }),
+    customerAgent.asTool({ toolName: "fetch_customer_data", /* ... */ }),
+    reportAgent.asTool({ toolName: "write_report",           /* ... */ }),
   ],
 });
 ```
@@ -148,12 +149,16 @@ Escalate only on a real ceiling:
 Each step exists to make one concept *observable*. Resist skipping ahead — step 4 only
 means something if you have felt steps 1–3.
 
-**1. Give one agent a real tool.**
-`reportAgent`, plus a `zod`-typed fake data fetcher.
+**1. Give one agent a real tool.** — **done.**
+`ReportAgent`, plus a `zod`-typed fake data fetcher (`get_order_sales_data`). `MenuAgent` and
+`CustomerAgent` followed the same shape.
 → *verify:* the run loop visibly fires a tool call and feeds the result back in.
 
-**2. Chain two agents in plain code.**
-`hubspotAgent` → `reportAgent`, wired with `await`.
+**2. Chain two agents in plain code.** — **in progress.**
+`CustomerAgent` → `ReportAgent`, wired with `await`. This is where `Orcestrator.runLoop()` has to
+stop ignoring everything past `agents[0]`. Settle the shape first: an ordered pipeline feeding each
+`finalOutput` into the next agent, or one agent picked per query? Those are different programs, and
+the answer decides whether step 3 is an upgrade or a rewrite.
 → *verify:* works end to end — and confirm for yourself that a model-router isn't needed yet.
 
 **3. Add a triage agent using `handoffs`.**
@@ -163,11 +168,15 @@ means something if you have felt steps 1–3.
 → *verify:* compare context sizes against step 3. That contrast is the payoff of the whole
 exercise.
 
-## 8. Fix before starting
+## 8. Open items
 
-- [ ] All three agents use model id `"gpt-6-luna"`, which is not a real OpenAI model — `run()`
-      will fail at the API call.
-- [ ] `.env` reads `OPENAI_API_KEY =...` with a space before `=`; it may parse as the key
-      `"OPENAI_API_KEY "` and never be found.
-- [ ] No `.gitignore`, so `.env` (holding a live API key), `dist/`, and `node_modules/` are
-      sitting untracked and exposed.
+Resolved: the fake `"gpt-6-luna"` model id is gone (every agent takes `modelName` from the
+validated env), the `.env` key parses cleanly, and `.gitignore` now covers `.env`, `dist/` and
+`node_modules/`.
+
+Still open:
+
+- [ ] `MenuAgent` and `CustomerAgent` are constructed nowhere — neither has been through a real
+      `run()`. Untested tool schemas are where the surprises live.
+- [ ] `Orcestrator` takes an `Agent[]` but runs only `agents[0]`. Step 2 is blocked on this.
+- [ ] `dist/` is stale and no longer matches the source layout.
