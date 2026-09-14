@@ -15,7 +15,7 @@ export class CustomerAgent implements AIAgent {
     });
 
   private returncustomerSchema = this.customerSchema.extend({
-    id: z.number(),
+    customerId: z.number(),
   });
 
   private findCustmerTool = tool({
@@ -28,7 +28,7 @@ export class CustomerAgent implements AIAgent {
       console.log(`find_customer called`);
       console.log(`customer name: ${customer.name}`);
       console.log(`customer email: ${customer.email}`);
-      return { ...customer, id: 1 };
+      return { ...customer, customerId: 1 };
     },
   });
 

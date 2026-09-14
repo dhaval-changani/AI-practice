@@ -8,14 +8,17 @@ export class ReportAgent implements AIAgent {
   private orderReportTool = tool({
     name: "get_order_sales_data",
     description:
-      "Fetches the orders sales data for specified start date and end date",
+      "Fetches the orders sales data for specified start date and end date for a cusotmer",
     parameters: z.object({
       startDate: z.iso.datetime(),
       endDate: z.iso.datetime(),
+      customerId: z.number(),
     }),
-    async execute({ startDate, endDate }) {
-      console.log(`Tool called with ${startDate}-${endDate} parameters`);
-      return `Sales data for ${startDate} and ${endDate} is 100$.`;
+    async execute({ startDate, endDate, customerId }) {
+      console.log(
+        `Tool called with ${startDate}-${endDate} for cusotmer ${customerId}`,
+      );
+      return `Sales data for ${startDate} and ${endDate} for ${customerId} is 100$.`;
     },
   });
 

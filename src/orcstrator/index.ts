@@ -1,13 +1,28 @@
 import { run, type Agent } from "@openai/agents";
+import { ReportAgent } from "../agents/report-agent.js";
+import type { validEnv } from "../utils/validate-env.js";
+import { CustomerAgent } from "../agents/customer-agent.js";
 
 export class Orcestrator {
-  constructor(private agents: Agent[]) {}
+  constructor(private env: validEnv) {}
 
   async runLoop(query: string) {
-    const agent = this.agents[0];
-    if (agent) {
-      const result = await run(agent, query);
-      console.log(result.finalOutput);
+    const reportAgent = new ReportAgent(this.env.model_name).getAgent();
+    const result = await run(reportAgent, query);
+    console.log(result.finalOutput);
+  }
+
+  async runLoopChained(query: string) {
+    const customerAgent = new CustomerAgent(this.env.model_name).getAgent();
+    const customerResult = await run(customerAgent, query);
+    console.log(customerResult.finalOutput);
+
+    if (customerResult.finalOutput) {
+      const reportAgent = new ReportAgent(this.env.model_name).getAgent();
+      const reportResult = await run(reportAgent, customerResult.finalOutput);
+      console.log(reportResult.finalOutput);
     }
+
+    console.log("Programm Exited");
   }
 }
