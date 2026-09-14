@@ -3,7 +3,7 @@ import z from "zod";
 process.loadEnvFile();
 
 export const validateEnv = (
-  env: any,
+  env: NodeJS.ProcessEnv,
 ): { api_key: string; model_name: string } => {
   const validVars = z
     .object({
