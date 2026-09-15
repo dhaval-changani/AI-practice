@@ -2,9 +2,20 @@ import process from "node:process";
 
 import { validateEnv } from "./utils/validate-env.js";
 import { Orcestrator } from "./orcstrator/index.js";
+import { retryPolicies } from "@openai/agents";
 
 const env = validateEnv(process.env);
 
-const orc = new Orcestrator(env);
+const orcestrator = new Orcestrator(env);
 
-orc.runLoopChained("What is the sales data for 14-sep for Dhaval");
+console.log(process.argv.slice(2));
+
+const getqueryFromArgs = () => {
+  return process.argv.slice(2).join(" ");
+};
+
+const query = getqueryFromArgs();
+
+if (query) {
+  orcestrator.runTraige(query);
+}

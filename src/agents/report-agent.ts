@@ -25,7 +25,7 @@ export class ReportAgent implements AIAgent {
   getAgent() {
     return new Agent({
       name: "Report Agent",
-      instructions: `You are agent which helps in reporting queries. Today's date is ${new Date().toISOString()}`,
+      instructions: `You are agent which helps in sales reporting queries. Today's date is ${new Date().toISOString()}`,
       model: this.modelName,
       tools: [this.orderReportTool],
     });
