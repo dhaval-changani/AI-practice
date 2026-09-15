@@ -75,7 +75,7 @@ const report = await run(reportAgent, data.finalOutput);
 
 The sequence is known in advance; no model decides anything structural. Predictable,
 testable, cheap. **Most "multi-agent" problems are really this**, and people reach past it
-too early.
+too early. This is what `Orcestrator.runLoopChained()` implements.
 
 ### b) Handoffs — the model routes
 
@@ -154,14 +154,28 @@ means something if you have felt steps 1–3.
 `CustomerAgent` followed the same shape.
 → *verify:* the run loop visibly fires a tool call and feeds the result back in.
 
-**2. Chain two agents in plain code.** — **in progress.**
-`CustomerAgent` → `ReportAgent`, wired with `await`. This is where `Orcestrator.runLoop()` has to
-stop ignoring everything past `agents[0]`. Settle the shape first: an ordered pipeline feeding each
-`finalOutput` into the next agent, or one agent picked per query? Those are different programs, and
-the answer decides whether step 3 is an upgrade or a rewrite.
-→ *verify:* works end to end — and confirm for yourself that a model-router isn't needed yet.
+**2. Chain two agents in plain code.** — **done.**
+`Orcestrator.runLoopChained()` runs `CustomerAgent` → `ReportAgent` with plain `await`. The shape
+settled as a fixed ordered pipeline, not a per-query pick — the sequence is hardcoded, so no model
+decides anything structural. `CustomerAgent` gained a zod `outputType`, which is what makes
+`customerId` readable as a field instead of scraped out of prose; `AIAgent` became generic to carry
+that type through.
+→ *verify:* ran end to end. Confirmed: no model-router needed for a sequence known in advance.
 
-**3. Add a triage agent using `handoffs`.**
+What this step exposed, worth sitting with before step 3:
+
+- The typed `finalOutput` is immediately flattened back into a string
+  (`` `${query} and customerId:${customerId}` ``) for the next agent. That is the lossy boundary from
+  section 5, and it is chosen, not forced — the report query could be built from fields instead.
+- There is no failure branch. `outputType` guarantees the *shape*, never that the customer exists.
+  A "not found" and a found customer come back looking identical; only an explicit variant in the
+  schema makes the caller able to branch.
+
+**3. Add a triage agent using `handoffs`.** — **next.**
+Give `MenuAgent` its first real run by making the entry point a triage agent whose `handoffs` are
+the three specialists, and feed it queries whose intent is genuinely ambiguous between them. Note
+that handoff *replaces* the chain: control transfers and does not come back, so the step-2 pipeline
+is not what triage produces.
 → *verify:* observe where natural-language routing picks the wrong specialist.
 
 **4. Convert to agents-as-tools with structured outputs.**
@@ -176,7 +190,10 @@ validated env), the `.env` key parses cleanly, and `.gitignore` now covers `.env
 
 Still open:
 
-- [ ] `MenuAgent` and `CustomerAgent` are constructed nowhere — neither has been through a real
-      `run()`. Untested tool schemas are where the surprises live.
-- [ ] `Orcestrator` takes an `Agent[]` but runs only `agents[0]`. Step 2 is blocked on this.
+- [x] `Orcestrator` no longer juggles an `Agent[]` — it takes the validated env and builds the
+      agents each run method needs.
+- [ ] `MenuAgent` is constructed nowhere — it has never been through a real `run()`. Untested tool
+      schemas are where the surprises live.
+- [ ] `runLoopChained()` catches and logs; a failed sub-agent is indistinguishable from a
+      successful one that found nothing.
 - [ ] `dist/` is stale and no longer matches the source layout.

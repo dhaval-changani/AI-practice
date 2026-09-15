@@ -36,36 +36,42 @@ No test runner is configured — `npm test` is still the stub that exits 1. If t
 
 A POC on top of the **OpenAI Agents SDK** (`@openai/agents`), ESM + TypeScript, executed directly with `tsx` (no build step needed for development).
 
-- `src/index.ts` — entrypoint. Calls `validateEnv(process.env)`, constructs `ReportAgent` with the
-  validated model name, wraps the resulting `Agent` in `Orcestrator`, and calls `runLoop()` with a
-  hardcoded query string.
-- `src/orcstrator/index.ts` — the `Orcestrator` class. Takes an `Agent[]`, but `runLoop()` currently
-  runs only `agents[0]` via `run()` and logs `finalOutput`; the remaining agents are ignored. Note
-  the two spellings: directory `orcstrator/`, class `Orcestrator` — grep for both.
+- `src/index.ts` — entrypoint. Calls `validateEnv(process.env)`, passes the validated env into
+  `Orcestrator`, and calls `runLoopChained()` with a hardcoded query string.
+- `src/orcstrator/index.ts` — the `Orcestrator` class. Takes the validated env and constructs the
+  agents it needs itself. Two methods: `runLoop()` runs `ReportAgent` alone, and `runLoopChained()`
+  is the step-2 deterministic chain — `CustomerAgent` runs first, its structured `finalOutput`
+  supplies `customerId`, which is appended to the query string handed to `ReportAgent`. Errors are
+  caught and logged, not rethrown. Note the two spellings: directory `orcstrator/`, class
+  `Orcestrator` — grep for both.
 - `src/agents/*.ts` — one agent per file. Each file exports a **class** (`ReportAgent`,
   `MenuAgent`, `CustomerAgent`) that implements `AIAgent`, takes `modelName` as a constructor
   argument, holds its tools as private fields built with `tool()` and zod v4 `parameters`, and
   exposes `getAgent()` returning a constructed `Agent`.
 - `src/agents/index.ts` — barrel re-exporting every agent class; new agents should be added here.
-- `src/types/agent.ts` — the `AIAgent` interface (`getAgent(): Agent`), the shared shape all agent
-  classes implement.
+- `src/types/agent.ts` — the `AIAgent<T extends AgentOutputType = TextOutput>` interface
+  (`getAgent(): Agent<unknown, T>`), the shared shape all agent classes implement. The generic lets
+  an agent declare a structured `outputType` (as `CustomerAgent` does) while text-output agents keep
+  the default.
 - `src/utils/validate-env.ts` — calls `process.loadEnvFile()` as a **module-level side effect at
   import time**; nothing else loads `.env`. Exports `validateEnv`, which parses `NodeJS.ProcessEnv`
   through a zod schema remapping `OPENAI_API_KEY` / `OPENAI_MODEL` onto `api_key` / `model_name`
   and throws when either is missing.
 
-Orchestration status: three agents exist, each with at least one real tool. There are no
-`handoffs`, no `outputType`, no guardrails, no `RunContext`, no tracing config and no streaming
-anywhere yet.
+Orchestration status: three agents exist, each with at least one real tool, and two of them are
+chained deterministically in `runLoopChained()`. `CustomerAgent` has a zod `outputType`; the others
+still return text. There are no `handoffs`, no agents-as-tools, no guardrails, no `RunContext`, no
+tracing config and no streaming anywhere yet.
 
 ## Known rough edges
 
 Observations only — under Learning Mode these are mine to fix.
 
-- `MenuAgent` and `CustomerAgent` are never instantiated — `src/index.ts` wires up only
-  `ReportAgent`, so those two have never been through a real run.
-- `Orcestrator.runLoop()` accepts an array but uses only the first element; the constructor
-  signature promises orchestration the body does not do yet.
+- `MenuAgent` is never instantiated — nothing wires it up, so it has never been through a real run.
+- The chain passes state by string concatenation (`` `${query} and customerId:${customerId}` ``);
+  the typed `finalOutput` is flattened back into prose for `ReportAgent` to re-parse.
+- `runLoopChained()` swallows errors with a `catch` that only logs, and treats a falsy
+  `finalOutput` as "skip the report" with no message.
 - `validateEnv` returns `api_key`, but nothing consumes it — the SDK reads `OPENAI_API_KEY` from
   `process.env` itself. The validation is fail-fast only.
 - `ReportAgent`'s `get_order_sales_data` takes full ISO datetimes (`z.iso.datetime()`); the current
@@ -80,7 +86,7 @@ Observations only — under Learning Mode these are mine to fix.
 `LEARNING.md` is the companion primer on multi-agent orchestration, and section 7 sets the build
 order for this repo: (1) give one agent a real tool, (2) chain two agents in plain code, (3) add a
 triage agent using `handoffs`, (4) convert to agents-as-tools with structured outputs. Progress:
-step 1 done, step 2 in progress. Read it before suggesting any architectural direction.
+steps 1 and 2 done, step 3 next. Read it before suggesting any architectural direction.
 
 ## Conventions
 

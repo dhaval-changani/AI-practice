@@ -13,16 +13,25 @@ export class Orcestrator {
   }
 
   async runLoopChained(query: string) {
-    const customerAgent = new CustomerAgent(this.env.model_name).getAgent();
-    const customerResult = await run(customerAgent, query);
-    console.log(customerResult.finalOutput);
+    try {
+      const customerAgent = new CustomerAgent(this.env.model_name).getAgent();
+      const customerResult = await run(customerAgent, query);
+      console.log({ customerAgentOutput: customerResult.finalOutput });
 
-    if (customerResult.finalOutput) {
-      const reportAgent = new ReportAgent(this.env.model_name).getAgent();
-      const reportResult = await run(reportAgent, customerResult.finalOutput);
-      console.log(reportResult.finalOutput);
+      if (customerResult.finalOutput) {
+        const customerId = customerResult.finalOutput.customerId;
+
+        const reportQuery = `${query} and customerId:${customerId}`;
+        console.log({ reportQuery });
+
+        const reportAgent = new ReportAgent(this.env.model_name).getAgent();
+        const reportResult = await run(reportAgent, reportQuery);
+        console.log(reportResult.finalOutput);
+      }
+
+      console.log("Programm Exited");
+    } catch (err) {
+      console.log(err);
     }
-
-    console.log("Programm Exited");
   }
 }

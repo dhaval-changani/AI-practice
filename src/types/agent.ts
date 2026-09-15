@@ -1,5 +1,5 @@
-import type { Agent } from "@openai/agents";
+import type { Agent, AgentOutputType, TextOutput } from "@openai/agents";
 
-export interface AIAgent {
-  getAgent(): Agent;
+export interface AIAgent<T extends AgentOutputType = TextOutput> {
+  getAgent: () => Agent<unknown, T>;
 }

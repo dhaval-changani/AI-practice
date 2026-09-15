@@ -2,33 +2,38 @@ import { Agent, tool } from "@openai/agents";
 import z from "zod";
 import type { AIAgent } from "../types/agent.js";
 
-export class CustomerAgent implements AIAgent {
+const CustomerSchema = z
+  .object({
+    name: z.string(),
+  })
+  .or(
+    z.object({
+      email: z.email(),
+    }),
+  );
+
+const ReturnCustomerSchema = z.object({
+  name: z.string(),
+  email: z.string(),
+  customerId: z.number(),
+});
+
+export class CustomerAgent implements AIAgent<typeof ReturnCustomerSchema> {
   constructor(private modelName: string) {}
-
-  private customerSchema = z
-    .object({
-      name: z.string().optional(),
-      email: z.email().optional(),
-    })
-    .refine((data) => data.name || data.email, {
-      message: "Name or email any one must be provided",
-    });
-
-  private returncustomerSchema = this.customerSchema.extend({
-    customerId: z.number(),
-  });
 
   private findCustmerTool = tool({
     name: "find_customer",
     description:
       "Takes in name or email of customer and fetches and returns customer data",
-    parameters: z.object({ customer: this.customerSchema }),
-    outputSchema: this.returncustomerSchema,
+    parameters: z.object({ customer: CustomerSchema }),
+    outputSchema: ReturnCustomerSchema,
     async execute({ customer }) {
-      console.log(`find_customer called`);
-      console.log(`customer name: ${customer.name}`);
-      console.log(`customer email: ${customer.email}`);
-      return { ...customer, customerId: 1 };
+      console.log(`find_customer called`, customer);
+      return {
+        name: "name" in customer ? customer.name : "",
+        email: "email" in customer ? customer.email : "",
+        customerId: 1,
+      };
     },
   });
 
@@ -38,6 +43,7 @@ export class CustomerAgent implements AIAgent {
       instructions: "You are a agent which helps with customer queries.",
       model: this.modelName,
       tools: [this.findCustmerTool],
+      outputType: ReturnCustomerSchema,
     });
   }
 }
