@@ -28,7 +28,6 @@ export class CustomerAgent implements AIAgent<typeof ReturnCustomerSchema> {
     parameters: z.object({ customer: CustomerSchema }),
     outputSchema: ReturnCustomerSchema,
     async execute({ customer }) {
-      console.log(`find_customer called`, customer);
       return {
         name: "name" in customer ? customer.name : "",
         email: "email" in customer ? customer.email : "",
@@ -41,6 +40,8 @@ export class CustomerAgent implements AIAgent<typeof ReturnCustomerSchema> {
     return new Agent({
       name: "Customer Agent",
       instructions: "You are a agent which helps with customer queries.",
+      handoffDescription:
+        "Use this agent when task is about finding cusotmers.",
       model: this.modelName,
       tools: [this.findCustmerTool],
       outputType: ReturnCustomerSchema,

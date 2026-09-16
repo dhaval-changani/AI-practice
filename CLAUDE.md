@@ -37,13 +37,15 @@ No test runner is configured — `npm test` is still the stub that exits 1. If t
 A POC on top of the **OpenAI Agents SDK** (`@openai/agents`), ESM + TypeScript, executed directly with `tsx` (no build step needed for development).
 
 - `src/index.ts` — entrypoint. Calls `validateEnv(process.env)`, passes the validated env into
-  `Orcestrator`, and calls `runLoopChained()` with a hardcoded query string.
+  `Orcestrator`, joins `process.argv.slice(2)` into a query string and calls `runTraige()` with it
+  (silently doing nothing when no argument is given). Run as `npm start "your query here"`.
 - `src/orcstrator/index.ts` — the `Orcestrator` class. Takes the validated env and constructs the
-  agents it needs itself. Two methods: `runLoop()` runs `ReportAgent` alone, and `runLoopChained()`
-  is the step-2 deterministic chain — `CustomerAgent` runs first, its structured `finalOutput`
-  supplies `customerId`, which is appended to the query string handed to `ReportAgent`. Errors are
-  caught and logged, not rethrown. Note the two spellings: directory `orcstrator/`, class
-  `Orcestrator` — grep for both.
+  agents it needs itself. Three methods: `runLoop()` runs `ReportAgent` alone; `runLoopChained()` is
+  the step-2 deterministic chain — `CustomerAgent` runs first, its structured `finalOutput` supplies
+  `customerId`, which is appended to the query string handed to `ReportAgent`; `runTraige()` is the
+  step-3 router, built with `Agent.create()` (not `new Agent()`, because the specialists' output
+  types differ) and handing off to all three specialists. All three catch and log, never rethrow.
+  Note the two spellings: directory `orcstrator/`, class `Orcestrator` — grep for both.
 - `src/agents/*.ts` — one agent per file. Each file exports a **class** (`ReportAgent`,
   `MenuAgent`, `CustomerAgent`) that implements `AIAgent`, takes `modelName` as a constructor
   argument, holds its tools as private fields built with `tool()` and zod v4 `parameters`, and
@@ -58,16 +60,21 @@ A POC on top of the **OpenAI Agents SDK** (`@openai/agents`), ESM + TypeScript, 
   through a zod schema remapping `OPENAI_API_KEY` / `OPENAI_MODEL` onto `api_key` / `model_name`
   and throws when either is missing.
 
-Orchestration status: three agents exist, each with at least one real tool, and two of them are
-chained deterministically in `runLoopChained()`. `CustomerAgent` has a zod `outputType`; the others
-still return text. There are no `handoffs`, no agents-as-tools, no guardrails, no `RunContext`, no
-tracing config and no streaming anywhere yet.
+Orchestration status: three agents exist, each with at least one real tool. Two are chained
+deterministically in `runLoopChained()`; all three are `handoffs` targets of the router in
+`runTraige()`, and each carries a `handoffDescription`. `CustomerAgent` has a zod `outputType`; the
+others still return text. There are no agents-as-tools, no guardrails, no `RunContext`, no tracing
+config and no streaming anywhere yet.
 
 ## Known rough edges
 
 Observations only — under Learning Mode these are mine to fix.
 
-- `MenuAgent` is never instantiated — nothing wires it up, so it has never been through a real run.
+- The triage instructions in `runTraige()` ask the router to "mention what is dropped"; in testing
+  it sometimes produced that prose *instead of* emitting the transfer, ending the run at the router
+  with nothing done.
+- `ReportAgent`'s `get_order_sales_data` guards unknown ids by returning an `ERROR:` **string**, not
+  by throwing — the model decides what to do with it.
 - The chain passes state by string concatenation (`` `${query} and customerId:${customerId}` ``);
   the typed `finalOutput` is flattened back into prose for `ReportAgent` to re-parse.
 - `runLoopChained()` swallows errors with a `catch` that only logs, and treats a falsy
@@ -86,7 +93,8 @@ Observations only — under Learning Mode these are mine to fix.
 `LEARNING.md` is the companion primer on multi-agent orchestration, and section 7 sets the build
 order for this repo: (1) give one agent a real tool, (2) chain two agents in plain code, (3) add a
 triage agent using `handoffs`, (4) convert to agents-as-tools with structured outputs. Progress:
-steps 1 and 2 done, step 3 next. Read it before suggesting any architectural direction.
+steps 1-3 done, step 4 next. Section 7's step-3 writeup records what the routing experiment
+actually produced. Read it before suggesting any architectural direction.
 
 ## Conventions
 

@@ -41,14 +41,14 @@ export class Orcestrator {
       const customerAgent = new CustomerAgent(this.env.model_name).getAgent();
       const reportAgent = new ReportAgent(this.env.model_name).getAgent();
       const menuAgent = new MenuAgent(this.env.model_name).getAgent();
-      const traigeAngent = new Agent({
+      const traigeAngent = Agent.create({
         name: "Traige Agent",
         model: this.env.model_name,
-        instructions:
-          "Choose the correct agent based on the query received, route the primart intent and mention what is dropped",
+        instructions: "Choose the correct agent based on the query received.",
         handoffs: [menuAgent, customerAgent, reportAgent],
       });
       const result = await run(traigeAngent, query);
+      console.log("Run Agent name:", result.lastAgent?.name);
       console.log("Final Output:", result.finalOutput);
     } catch (err) {
       console.log(err);

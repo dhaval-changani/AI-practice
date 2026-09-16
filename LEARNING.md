@@ -171,12 +171,51 @@ What this step exposed, worth sitting with before step 3:
   A "not found" and a found customer come back looking identical; only an explicit variant in the
   schema makes the caller able to branch.
 
-**3. Add a triage agent using `handoffs`.** — **next.**
-Give `MenuAgent` its first real run by making the entry point a triage agent whose `handoffs` are
-the three specialists, and feed it queries whose intent is genuinely ambiguous between them. Note
-that handoff *replaces* the chain: control transfers and does not come back, so the step-2 pipeline
-is not what triage produces.
-→ *verify:* observe where natural-language routing picks the wrong specialist.
+**3. Add a triage agent using `handoffs`.** — **done.**
+`Orcestrator.runTraige()` builds a router with the three specialists as `handoffs`; each specialist
+carries a `handoffDescription`, which is what the SDK folds into the generated `transfer_to_*` tool
+so the router has something beyond a bare agent name to choose on. `MenuAgent` got its first real
+`run()` here.
+→ *verify:* ran 7 queries. **2 of 7** produced both a correct route and a correct result.
+
+### What the runs actually showed
+
+**The router sometimes narrates the handoff instead of performing it.** "Create new item apple 1usd"
+ended with `lastAgent` still being the triage agent and the text "I'm routing this to the Menu Agent
+to create the item." No `transfer_to_*` was emitted; nothing was created. The same query on the next
+run transferred correctly and reached `MenuAgent`. Same input, two different mechanisms — this is
+the sharpest available demonstration that routing is token sampling, not a dispatch table.
+
+The instructions caused it. They said to "route the primary intent and mention what is dropped",
+which asks for prose; the model produced the prose *in place of* the transfer. A router's prompt
+should tell it to transfer and never to answer directly — anything that invites commentary competes
+with the mechanism.
+
+**Every required parameter with no value in the query gets invented.** Three instances, same shape:
+an early run called `get_order_sales_data` with `customerId: 0` for a customer named "Dhaval";
+"Find sales data for customer 1" invented a Jan 1 – Sep 16 date range nobody asked for; "Find
+customer data for customer 1" came back as `name: "customer 1"`, because `CustomerSchema` accepts
+only a name or an email and has no lookup-by-id branch, so the model forced the string into the
+field that existed.
+
+**Zod validates shape, never meaning.** All three fabrications were schema-valid. `outputType` and
+typed `parameters` buy structural guarantees and nothing else; a well-formed answer about a customer
+that does not exist still reads as success to the caller.
+
+**A typed failure case changes the failure's character.** After `get_order_sales_data` started
+rejecting unknown ids (and `customerId` became `.int().positive()`), "Find sales data for customer
+dhaval" stopped inventing an id and asked for one instead. Same unanswerable query, but the failure
+became legible rather than a confident `$100`. This is §5's argument, measured.
+
+**Two-hop queries cannot be routed.** "Dhaval's sales data" needs a name→`customerId` resolution and
+then a report. A handoff picks exactly one agent and transfers permanently, so no routing decision
+here can be correct: the router either fabricates the missing id or stops and asks. `runLoopChained`
+already does the right thing for this shape and is unreachable from a handoff.
+
+**Schema minimums become conversational dead ends.** `create_item` requires a description
+(`min(2)`), so "Create new item apple 1usd" ended in a request for one. In a one-shot script there
+is nobody to answer — the run just ends. Validation strictness and single-turn execution pull in
+opposite directions.
 
 **4. Convert to agents-as-tools with structured outputs.**
 → *verify:* compare context sizes against step 3. That contrast is the payoff of the whole
@@ -192,8 +231,15 @@ Still open:
 
 - [x] `Orcestrator` no longer juggles an `Agent[]` — it takes the validated env and builds the
       agents each run method needs.
-- [ ] `MenuAgent` is constructed nowhere — it has never been through a real `run()`. Untested tool
-      schemas are where the surprises live.
+- [x] `MenuAgent` has been through a real `run()` (step 3).
+- [ ] The triage instructions ask for prose ("mention what is dropped"), which competes with
+      emitting the transfer. Rewrite as route-only before trusting any further routing numbers.
+- [ ] `CustomerSchema` has no lookup-by-id branch, so an id in the query gets forced into `name`.
+- [ ] `get_order_sales_data` requires `startDate`/`endDate`; absent a range in the query the model
+      invents one. Decide whether they should be optional with an explicit default.
 - [ ] `runLoopChained()` catches and logs; a failed sub-agent is indistinguishable from a
       successful one that found nothing.
+- [ ] Mixed output types across `handoffs` (`CustomerAgent` has an `outputType`, the others are
+      text) forced the switch to `Agent.create()`. Worth re-reading why the plain constructor
+      widens the union.
 - [ ] `dist/` is stale and no longer matches the source layout.

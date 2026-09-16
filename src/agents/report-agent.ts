@@ -12,12 +12,12 @@ export class ReportAgent implements AIAgent {
     parameters: z.object({
       startDate: z.iso.datetime(),
       endDate: z.iso.datetime(),
-      customerId: z.number(),
+      customerId: z.number().int().positive(),
     }),
     async execute({ startDate, endDate, customerId }) {
-      console.log(
-        `Tool called with ${startDate}-${endDate} for cusotmer ${customerId}`,
-      );
+      if (customerId !== 1) {
+        return `ERROR: The customerId ${customerId} does not exists, ask customer to verify!`;
+      }
       return `Sales data for ${startDate} and ${endDate} for ${customerId} is 100$.`;
     },
   });
@@ -26,6 +26,8 @@ export class ReportAgent implements AIAgent {
     return new Agent({
       name: "Report Agent",
       instructions: `You are agent which helps in sales reporting queries. Today's date is ${new Date().toISOString()}`,
+      handoffDescription:
+        "Use this agent when task is related to reporting or sales data",
       model: this.modelName,
       tools: [this.orderReportTool],
     });

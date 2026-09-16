@@ -51,6 +51,8 @@ export class MenuAgent implements AIAgent {
     return new Agent({
       name: "Menu Agent",
       instructions: "You are agent which helps in creating items and menus.",
+      handoffDescription:
+        "Use this agent when task is about creating items or menus",
       model: this.modelName,
       tools: [this.createMenuTool, this.createItemTool],
     });
